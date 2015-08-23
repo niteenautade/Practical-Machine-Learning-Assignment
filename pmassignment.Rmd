@@ -1,0 +1,103 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Niteen Autade"
+output: html_document
+---
+
+###Load the required libraries
+
+```{r warning=FALSE,message=FALSE}
+library(caret);library(randomForest);library(rpart);library(rpart.plot)
+```
+
+###Load the given datasets
+
+```{r cache=TRUE}
+if(!file.exists("pml-training.csv")){
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")}
+if(!file.exists("pml-testing.csv")){
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")}
+
+pml.training<- read.csv(file = "./pml-training.csv")
+pml.testing<- read.csv(file = "./pml-testing.csv")
+```
+
+###Cleaning the datasets
+```{r}
+#Transformation 1:By obervation we see that columns 1:5 are useless for creating our model.So we can safely eliminate them for creating a model
+pml.training <- pml.training[,-c(1:5)]
+pml.testing <- pml.testing[,-c(1:5)]
+
+#Transformation 2:Clearing the near zero variance variables
+nzv_variables <- nearZeroVar(pml.training)
+pml.training <- pml.training[,-nzv_variables]
+pml.testing <- pml.testing[,-nzv_variables]
+
+#Transformation 3: Cleaning Variables with too many NAs.Variables that have more than a 60% threshold of NA’s I’m going to remove them:
+no_obs<-(dim(pml.training)[1])
+no_col<-dim(pml.training)[2]
+col_remove<-data.frame()
+for(i in 1:no_col)
+  {if(sum(is.na(pml.training[,i]))>=(no_obs*0.6) )
+      col_remove<-rbind(col_remove,i)
+    
+}
+col_remove<-data.frame(col_remove)
+pml.training<-pml.training[,-col_remove[,1]]
+pml.testing<-pml.testing[,-col_remove[,1]]
+```
+
+###Partitioning the training set for Cross-Validation
+
+Our outcome is the "classe" variable which has 5 levels :**A,B,C,D,E**
+
+In order to perform cross-validation, the training data set is partitioned into 2 sets: subTraining (75%) and subTest (25%)
+```{r}
+inTrain <- createDataPartition(pml.training$classe,p=0.75,list=FALSE)
+subtraining <- pml.training[inTrain,]
+subtesting <- pml.training[-inTrain,]
+
+```
+
+###Prediction Model 1: Using decision trees
+```{r cache=TRUE}
+model1<- rpart(classe~.,data=subtraining,method="class")
+prediction1 <- predict(model1, subtesting,type="class")
+rpart.plot(model1, main="Classification Tree")
+confusionMatrix(prediction1, subtesting$classe)
+```
+
+###Prediction Model 2: Using Random Forests
+```{r cache=TRUE}
+model2 <- randomForest(classe ~. , data=subtraining, method="class")
+prediction2 <- predict(model2, subtesting, type = "class")
+
+confusionMatrix(prediction2, subtesting$classe)
+
+
+```
+
+###Conclusion
+Have a look at the accuracy of both the models.
+Just as expected,Random Forests model predicted much better than Decision Trees model.
+**Thus,the random Forest model is choosen.**
+
+###Submission
+```{r}
+predictfinal <- predict(model2, pml.testing, type="class")
+predictfinal
+```
+
+Function to generate files with predictions to submit for assignment
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictfinal)
+```
